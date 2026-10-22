@@ -17,3 +17,13 @@ Where the build spec was ambiguous, the most conservative option was taken. Conf
 
 ## Environment note
 `npm install` of dev dependencies failed with an npm arborist error on this machine. `--legacy-peer-deps` fixed it.
+
+## Real SAP sample files (data/sample)
+11. The real export differs from the spec's column names. Ingest reads the real headers (`SKU_ID, SKU_Name, Perishability, Standard_Reorder_Qty`, etc.).
+12. `Perishability = High` means perishable; `Low` means not. No other values are accepted.
+13. Weeks arrive as ISO labels (`2026-W42`) and are stored as the Monday date.
+14. The export has no `first_sale_date` or `active` flag. All SKUs are treated as active, and new-launch detection relies on weeks of sales history only.
+15. `Distributor_ID` and category are in the master file but unused in v1 (per-distributor logic is out of scope).
+16. The stock file has a location column. Stock is summed across locations per SKU.
+17. The sample sales history is 16 weeks (W27-W42). The engine uses the latest 12.
+18. `festival_calendar.csv` agrees with `rules.json` (Mar, Oct, Nov). Rules.json stays the source of truth.

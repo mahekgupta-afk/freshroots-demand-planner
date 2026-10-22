@@ -31,37 +31,71 @@ export function parseCsv(text: string): Record<string, string>[] {
   return body.map((r) => Object.fromEntries(keys.map((k, i) => [k, (r[i] ?? "").trim()])));
 }
 
-const yn = z.enum(["Y", "N"]).transform((v) => v === "Y");
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "expected YYYY-MM-DD");
 const num = z.coerce.number().finite().nonnegative();
 
+/** Monday (YYYY-MM-DD) of an ISO week label such as "2026-W27". */
+export function isoWeekToMonday(label: string): string {
+  const m = /^(\d{4})-W(\d{2})$/.exec(label);
+  if (!m) throw new Error("expected ISO week like 2026-W27");
+  const year = Number(m[1]);
+  const week = Number(m[2]);
+  if (week < 1 || week > 53) throw new Error("week out of range");
+  const jan4 = new Date(Date.UTC(year, 0, 4));
+  const dow = jan4.getUTCDay() || 7; // Mon=1..Sun=7
+  const week1Monday = Date.UTC(year, 0, 4 - (dow - 1));
+  return new Date(week1Monday + (week - 1) * 7 * 86_400_000).toISOString().slice(0, 10);
+}
+
+const isoWeek = z.string().transform((v, ctx) => {
+  try { return isoWeekToMonday(v); }
+  catch (e) { ctx.addIssue({ code: "custom", message: (e as Error).message }); return z.NEVER; }
+});
+
+// Headers are the SAP export's own (matched case-insensitively by parseCsv).
+// The export has no first_sale_date or active flag, so those are not read.
 export const skuMasterRow = z.object({
   sku_id: z.string().min(1),
-  name: z.string().min(1),
-  perishable: yn,
-  std_qty: z.coerce.number().int().nonnegative(),
-  first_sale_date: isoDate.or(z.literal("")).transform((v) => v || null),
-  active: yn,
-});
+  sku_name: z.string().min(1),
+  category: z.string().optional(),
+  perishability: z.enum(["High", "Low"]),
+  standard_reorder_qty: z.coerce.number().int().nonnegative(),
+  distributor_id: z.string().optional(),
+}).transform((r) => ({
+  sku_id: r.sku_id,
+  name: r.sku_name,
+  perishable: r.perishability === "High",
+  std_qty: r.standard_reorder_qty,
+}));
 
 export const weeklySalesRow = z.object({
   sku_id: z.string().min(1),
-  week_start: isoDate.refine(
-    (d) => new Date(`${d}T00:00:00Z`).getUTCDay() === 1,
-    "week_start must be a Monday",
-  ),
-  qty: num,
-});
+  week: isoWeek,
+  units_sold: num,
+}).transform((r) => ({ sku_id: r.sku_id, week_start: r.week, qty: r.units_sold }));
 
 export const stockRow = z.object({
   sku_id: z.string().min(1),
-  snapshot_date: isoDate,
-  on_hand: num,
-});
+  location: z.string().optional(),
+  units_on_hand: num,
+  as_of_date: isoDate,
+}).transform((r) => ({ sku_id: r.sku_id, snapshot_date: r.as_of_date, on_hand: r.units_on_hand, location: r.location }));
 
 export type SkuMasterRow = z.infer<typeof skuMasterRow>;
 export type WeeklySalesRow = z.infer<typeof weeklySalesRow>;
 export type StockRow = z.infer<typeof stockRow>;
+
+/** Sum stock across locations per SKU and snapshot date. */
+export function totalStockBySku(rows: StockRow[]): { sku_id: string; snapshot_date: string; on_hand: number }[] {
+  const m = new Map<string, { sku_id: string; snapshot_date: string; on_hand: number }>();
+  for (const r of rows) {
+    const k = `${r.sku_id}|${r.snapshot_date}`;
+    const cur = m.get(k);
+    if (cur) cur.on_hand += r.on_hand;
+    else m.set(k, { sku_id: r.sku_id, snapshot_date: r.snapshot_date, on_hand: r.on_hand });
+  }
+  return [...m.values()];
+}
 
 export class IngestError extends Error {
   constructor(public file: string, message: string) {

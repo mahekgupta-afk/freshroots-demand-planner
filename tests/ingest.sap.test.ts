@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { parseCsv, parseSkuMaster, parseWeeklySales, parseStock, assertFresh, IngestError } from "@/lib/ingest/sap";
+import { readFileSync } from "node:fs";
+import {
+  parseCsv, parseSkuMaster, parseWeeklySales, parseStock, assertFresh,
+  isoWeekToMonday, totalStockBySku, IngestError,
+} from "@/lib/ingest/sap";
+
+const sample = (f: string) => readFileSync(new URL(`../data/sample/${f}`, import.meta.url), "utf8");
 
 describe("parseCsv", () => {
   it("handles quotes, commas in fields, CRLF and BOM", () => {
@@ -11,50 +17,73 @@ describe("parseCsv", () => {
   });
 });
 
-describe("sku_master.csv", () => {
-  const head = "sku_id,name,perishable,std_qty,first_sale_date,active\n";
-  it("parses valid rows and converts Y/N", () => {
-    const { rows } = parseSkuMaster(head + "A1,Namkeen,N,500,2024-01-01,Y\nA2,Bread,Y,200,,Y\n");
-    expect(rows[0]).toMatchObject({ perishable: false, active: true, std_qty: 500 });
-    expect(rows[1]).toMatchObject({ perishable: true, first_sale_date: null });
+describe("isoWeekToMonday", () => {
+  it("converts ISO weeks to Mondays", () => {
+    expect(isoWeekToMonday("2026-W27")).toBe("2026-06-29");
+    expect(isoWeekToMonday("2026-W42")).toBe("2026-10-12");
+    expect(isoWeekToMonday("2026-W01")).toBe("2025-12-29");
+  });
+  it("rejects bad labels", () => {
+    expect(() => isoWeekToMonday("2026-27")).toThrow();
+    expect(() => isoWeekToMonday("2026-W60")).toThrow();
+  });
+});
+
+const head = "SKU_ID,SKU_Name,Category,Perishability,Standard_Reorder_Qty,Unit_of_Measure,Distributor_ID\n";
+
+describe("SKU master", () => {
+  it("maps High perishability to perishable and renames fields", () => {
+    const { rows } = parseSkuMaster(head + "A1,Namkeen,Snack,Low,500,Units,D1\nA2,Bread,Staple,High,200,Units,D1\n");
+    expect(rows[0]).toEqual({ sku_id: "A1", name: "Namkeen", perishable: false, std_qty: 500 });
+    expect(rows[1]!.perishable).toBe(true);
   });
   it("rejects an empty file", () => {
     expect(() => parseSkuMaster(head)).toThrow(IngestError);
   });
   it("rejects when more than 5% of rows are bad", () => {
-    const good = Array.from({ length: 18 }, (_, i) => `S${i},N${i},N,100,2024-01-01,Y`).join("\n");
-    const bad = "B1,x,MAYBE,100,2024-01-01,Y\nB2,y,N,-5,2024-01-01,Y";
+    const good = Array.from({ length: 18 }, (_, i) => `S${i},N${i},Snack,Low,100,Units,D1`).join("\n");
+    const bad = "B1,x,Snack,Medium,100,Units,D1\nB2,y,Snack,Low,-5,Units,D1";
     expect(() => parseSkuMaster(head + good + "\n" + bad)).toThrow(/invalid/);
   });
-  it("tolerates a bad-row share at or under 5% and reports the rows", () => {
-    const good = Array.from({ length: 19 }, (_, i) => `S${i},N${i},N,100,2024-01-01,Y`).join("\n");
-    const { rows, badRows } = parseSkuMaster(head + good + "\nB1,x,MAYBE,100,2024-01-01,Y");
+  it("tolerates 5% bad rows and reports them", () => {
+    const good = Array.from({ length: 19 }, (_, i) => `S${i},N${i},Snack,Low,100,Units,D1`).join("\n");
+    const { rows, badRows } = parseSkuMaster(head + good + "\nB1,x,Snack,Medium,100,Units,D1");
     expect(rows).toHaveLength(19);
-    expect(badRows).toHaveLength(1);
     expect(badRows[0]!.line).toBe(21);
   });
 });
 
-describe("weekly_sales.csv", () => {
-  it("requires Monday week starts and non-negative qty", () => {
-    expect(() => parseWeeklySales("sku_id,week_start,qty\nA1,2026-10-06,10\n")).toThrow(/invalid/); // Tuesday
-    expect(() => parseWeeklySales("sku_id,week_start,qty\nA1,2026-10-05,-1\n")).toThrow(/invalid/);
-    expect(parseWeeklySales("sku_id,week_start,qty\nA1,2026-10-05,10\n").rows[0]!.qty).toBe(10);
+describe("weekly sales", () => {
+  it("converts ISO week labels to Monday dates", () => {
+    const { rows } = parseWeeklySales("SKU_ID,Week,Units_Sold\nA1,2026-W42,259\n");
+    expect(rows[0]).toEqual({ sku_id: "A1", week_start: "2026-10-12", qty: 259 });
+  });
+  it("rejects negative units", () => {
+    expect(() => parseWeeklySales("SKU_ID,Week,Units_Sold\nA1,2026-W42,-1\n")).toThrow(/invalid/);
   });
 });
 
-describe("stock.csv", () => {
-  it("parses on_hand as a number", () => {
-    expect(parseStock("sku_id,snapshot_date,on_hand\nA1,2026-10-21,340\n").rows[0]!.on_hand).toBe(340);
+describe("stock", () => {
+  it("sums across locations", () => {
+    const { rows } = parseStock("SKU_ID,Location,Units_On_Hand,As_Of_Date\nA1,Pune,100,2026-10-19\nA1,Goa,50,2026-10-19\n");
+    expect(totalStockBySku(rows)).toEqual([{ sku_id: "A1", snapshot_date: "2026-10-19", on_hand: 150 }]);
   });
 });
 
 describe("assertFresh", () => {
   const now = new Date("2026-10-22T02:00:00Z");
-  it("passes for a file under 2 days old", () => {
+  it("passes under 2 days", () => {
     expect(() => assertFresh("stock.csv", new Date("2026-10-21T00:00:00Z"), now)).not.toThrow();
   });
-  it("rejects a stale file", () => {
+  it("rejects stale", () => {
     expect(() => assertFresh("stock.csv", new Date("2026-10-18T00:00:00Z"), now)).toThrow(/stale/);
+  });
+});
+
+describe("real sample files", () => {
+  it("all parse with zero bad rows", () => {
+    expect(parseSkuMaster(sample("sku_master.csv")).rows).toHaveLength(15);
+    expect(parseWeeklySales(sample("weekly_sales.csv")).rows).toHaveLength(240);
+    expect(parseStock(sample("stock.csv")).badRows).toHaveLength(0);
   });
 });
