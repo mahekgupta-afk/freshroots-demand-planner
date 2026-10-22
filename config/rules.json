@@ -1,0 +1,16 @@
+{
+  "version": "2026-10-22.1",
+  "festival_months": [3, 10, 11],
+  "festival_uplift": 1.25,
+  "high_demand": { "threshold_vs_12wk": 1.2, "reorder_multiplier": 1.5 },
+  "cover_weeks": {
+    "standard":   { "min": 6, "max": 14 },
+    "perishable": { "min": 3, "max": 4 }
+  },
+  "include_open_pos_in_stock": true,
+  "review_triggers": {
+    "min_weeks_history": 12,
+    "max_coefficient_of_variation": 0.5,
+    "last_week_drop_ratio": 0.65
+  }
+}
