@@ -12,6 +12,7 @@ npm install --legacy-peer-deps
 npm run dev   # http://localhost:3000
 npm run migrate   # apply db/migrations to DATABASE_URL (.env.local)
 npm run seed      # load data/sample
+npm run triage-smoke   # one real Gemini call with demo SKUs
 npm test
 npm run typecheck
 ```

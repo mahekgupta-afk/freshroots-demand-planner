@@ -1,22 +1,16 @@
 import { describe, it, expect, beforeAll } from "vitest";
-import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { PGlite } from "@electric-sql/pglite";
-import { splitSql } from "@/lib/db/migrate";
+import { freshDb } from "./helpers/db";
 import { seedSample } from "@/lib/db/seed";
 import { executeRun } from "@/lib/pipeline/execute";
 import type { Query } from "@/lib/db/server";
 
 // Real Postgres (WASM), so the migration SQL, upserts and JSON inserts are genuinely exercised.
-let pg: PGlite;
 let query: Query;
 const sampleDir = fileURLToPath(new URL("../data/sample", import.meta.url));
 
 beforeAll(async () => {
-  pg = new PGlite();
-  query = async (text, params = []) => (await pg.query(text, params)).rows as Record<string, unknown>[];
-  const migration = readFileSync(new URL("../db/migrations/0001_init.sql", import.meta.url), "utf8");
-  for (const stmt of splitSql(migration)) await pg.exec(stmt);
+  ({ query } = await freshDb());
 });
 
 describe("database", () => {

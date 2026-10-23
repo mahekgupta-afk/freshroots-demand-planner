@@ -8,6 +8,7 @@ import { formatWhen, monthName } from "@/lib/format";
 import { runNow } from "./review/actions";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60; // the Run now server action runs the full pipeline
 
 export default async function Dashboard() {
   const user = await requireUser();

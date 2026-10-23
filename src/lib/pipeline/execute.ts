@@ -1,13 +1,22 @@
 import { neonQuery, type Query } from "@/lib/db/server";
 import { rules } from "@/lib/data/sample";
 import { runPipeline, planningMonthIST, type PipelineInput } from "./run";
+import { triageAll, type TriageConfig, type TriageItem, type TriageOutcome } from "@/lib/gemini/triage";
+
+/** Leaves headroom inside a 60s serverless function for ingest, saving and the response. */
+const AI_BUDGET_MS = 35_000;
+
+export interface RunOptions {
+  /** Override the triage step (tests). Defaults to the real Gemini call when the env vars are set. */
+  triage?: (items: TriageItem[], onCall: TriageConfig["onCall"]) => Promise<TriageOutcome[]>;
+}
 
 /**
  * Full scheduled run against Postgres: read inputs, apply rules, save run + recommendations.
  * Zoho sync, Gemini triage and email are added in later phases.
  * `query` is injectable so tests can run against an in-memory Postgres.
  */
-export async function executeRun(trigger: "cron" | "manual", query: Query = neonQuery()) {
+export async function executeRun(trigger: "cron" | "manual", query: Query = neonQuery(), opts: RunOptions = {}) {
   const planningMonth = planningMonthIST();
 
   const [run] = await query(
@@ -34,6 +43,47 @@ export async function executeRun(trigger: "cron" | "manual", query: Query = neon
 
     const { planned, summary } = runPipeline({ rules, planningMonth, skus, sales, stock, openPos });
 
+    // AI notes for the SKUs the rules cannot decide. Strictly advisory: quantities come from the rules only,
+    // and nothing in this block can fail the run.
+    const ai = { attempted: 0, succeeded: 0, failed: 0, skipped_reason: null as string | null };
+    const notes = new Map<string, TriageOutcome>();
+    const toTriage: TriageItem[] = planned
+      .filter((p) => p.status === "needs_review")
+      .map((p) => ({
+        sku_id: p.sku_id, name: p.name, perishable: p.perishable, weekly_sales: p.weekly_sales,
+        on_hand: p.on_hand, open_po_qty: p.open_po_qty, rule_status: p.rule_status,
+        rule_qty: p.recommended_qty, review_reasons: p.review_reasons, planning_month: planningMonth,
+      }));
+    if (toTriage.length > 0) {
+      const apiKey = process.env.GEMINI_API_KEY;
+      const model = process.env.GEMINI_MODEL;
+      const triage = opts.triage ?? (apiKey && model
+        ? (items: TriageItem[], onCall: TriageConfig["onCall"]) => triageAll(items, { apiKey, model, onCall, deadlineAt: Date.now() + AI_BUDGET_MS })
+        : null);
+      if (!triage) {
+        ai.skipped_reason = "GEMINI_API_KEY or GEMINI_MODEL is not set";
+      } else {
+        try {
+          const outcomes = await triage(toTriage, async (log) => {
+            await query(
+              "insert into ai_calls (run_id, sku_id, model, request, response, latency_ms, error) values ($1, null, $2, $3::jsonb, $4::jsonb, $5, $6)",
+              [runId, log.model, JSON.stringify({ skus: log.skus, body: log.request }), JSON.stringify(log.response), log.latency_ms, log.error],
+            );
+          });
+          for (const o of outcomes) notes.set(o.sku_id, o);
+          ai.attempted = outcomes.length;
+          ai.succeeded = outcomes.filter((o) => !o.failed).length;
+          ai.failed = ai.attempted - ai.succeeded;
+        } catch (e) {
+          // Defensive: triageAll does not throw, but a custom triage might.
+          ai.attempted = toTriage.length;
+          ai.failed = toTriage.length;
+          ai.skipped_reason = e instanceof Error ? e.message : String(e);
+          for (const t of toTriage) notes.set(t.sku_id, { sku_id: t.sku_id, note: null, action: null, confidence: null, failed: true });
+        }
+      }
+    }
+
     const rows = planned.map((p) => ({
       run_id: runId,
       sku_id: p.sku_id,
@@ -49,6 +99,10 @@ export async function executeRun(trigger: "cron" | "manual", query: Query = neon
       reasons: p.reasons,
       review_reasons: p.review_reasons,
       review_state: p.review_state,
+      gemini_note: notes.get(p.sku_id)?.note ?? null,
+      gemini_action: notes.get(p.sku_id)?.action ?? null,
+      gemini_confidence: notes.get(p.sku_id)?.confidence ?? null,
+      gemini_failed: notes.get(p.sku_id)?.failed ?? false,
     }));
     // Explicit column list: populate_recordset yields NULL for absent columns, which would skip defaults (id, created_at).
     const cols = Object.keys(rows[0] ?? {}).join(", ");
@@ -59,9 +113,9 @@ export async function executeRun(trigger: "cron" | "manual", query: Query = neon
 
     await query("update runs set status = 'done', finished_at = now(), summary = $2::jsonb where id = $1", [
       runId,
-      JSON.stringify(summary),
+      JSON.stringify({ ...summary, ai }),
     ]);
-    return { runId, summary };
+    return { runId, summary: { ...summary, ai } };
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     await query("update runs set status = 'failed', finished_at = now(), error = $2 where id = $1", [runId, message]);
