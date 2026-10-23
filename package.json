@@ -14,7 +14,8 @@
     "seed": "tsx --env-file=.env.local scripts/seed.ts",
     "migrate": "tsx --env-file=.env.local scripts/migrate.ts",
     "run-once": "tsx --env-file=.env.local scripts/run-once.ts",
-    "create-user": "tsx --env-file=.env.local scripts/create-user.ts"
+    "create-user": "tsx --env-file=.env.local scripts/create-user.ts",
+    "triage-smoke": "tsx --env-file=.env.local scripts/triage-smoke.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.2.0",

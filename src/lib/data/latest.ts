@@ -33,6 +33,8 @@ export interface RecRow {
   decided_at: string | null;
   gemini_note: string | null;
   gemini_confidence: string | null;
+  gemini_action: string | null;
+  gemini_failed: boolean;
   weekly_sales: number[];
 }
 
@@ -74,7 +76,7 @@ export async function getLatestRun(query: Query): Promise<{ run: RunInfo; recs: 
             rec.cover_weeks::float8 as cover_weeks, rec.recommended_qty, rec.reasons, rec.review_reasons,
             rec.review_state::text as review_state, rec.final_qty, rec.override_reason,
             p.full_name as decided_by_name, rec.decided_at::text as decided_at,
-            rec.gemini_note, rec.gemini_confidence,
+            rec.gemini_note, rec.gemini_confidence, rec.gemini_action, rec.gemini_failed,
             coalesce((select json_agg(w.qty order by w.week_start)
                         from (select qty::float8 as qty, week_start from weekly_sales
                                where sku_id = rec.sku_id order by week_start desc limit 12) w), '[]'::json) as weekly_sales
@@ -107,6 +109,8 @@ export async function getLatestRun(query: Query): Promise<{ run: RunInfo; recs: 
     decided_at: x.decided_at === null ? null : String(x.decided_at),
     gemini_note: x.gemini_note === null ? null : String(x.gemini_note),
     gemini_confidence: x.gemini_confidence === null ? null : String(x.gemini_confidence),
+    gemini_action: x.gemini_action === null ? null : String(x.gemini_action),
+    gemini_failed: Boolean(x.gemini_failed),
     // Arrays of numbers may arrive as JSON text or parsed, depending on the driver.
     weekly_sales: (typeof x.weekly_sales === "string" ? JSON.parse(x.weekly_sales) : (x.weekly_sales as number[])).map(Number),
   }));

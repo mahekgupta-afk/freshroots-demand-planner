@@ -1,8 +1,6 @@
 import { describe, it, expect, beforeAll } from "vitest";
-import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { PGlite } from "@electric-sql/pglite";
-import { splitSql } from "@/lib/db/migrate";
+import { freshDb } from "./helpers/db";
 import { seedSample } from "@/lib/db/seed";
 import { executeRun } from "@/lib/pipeline/execute";
 import { getLatestRun } from "@/lib/data/latest";
@@ -19,11 +17,7 @@ async function pendingIds() {
 }
 
 beforeAll(async () => {
-  const pg = new PGlite();
-  query = async (t, p = []) => (await pg.query(t, p)).rows as Record<string, unknown>[];
-  for (const f of ["0001_init.sql", "0002_auth.sql"]) {
-    for (const s of splitSql(readFileSync(new URL(`../db/migrations/${f}`, import.meta.url), "utf8"))) await pg.exec(s);
-  }
+  ({ query } = await freshDb());
   await seedSample(query, sampleDir);
   // A new launch with only 6 weeks of history: the rules must route it to review.
   await query("insert into skus (sku_id, name, perishable, std_qty) values ('NEW001', 'New Launch Bar', false, 200)");
@@ -38,9 +32,7 @@ beforeAll(async () => {
 
 describe("getLatestRun", () => {
   it("returns null before any run finishes", async () => {
-    const empty = new PGlite();
-    for (const s of splitSql(readFileSync(new URL("../db/migrations/0001_init.sql", import.meta.url), "utf8"))) await empty.exec(s);
-    expect(await getLatestRun(async (t, p = []) => (await empty.query(t, p)).rows as Record<string, unknown>[])).toBeNull();
+    expect(await getLatestRun((await freshDb()).query)).toBeNull();
   });
 
   it("returns typed rows, most urgent first, with 12-week history", async () => {

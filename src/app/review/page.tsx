@@ -51,11 +51,19 @@ export default async function ReviewPage() {
               <p className="mt-2 text-sm text-slate-600">
                 Stock {Math.round(r.effective_stock)} · demand {r.weekly_demand.toFixed(0)}/wk · cover {r.cover_weeks === null ? "∞" : r.cover_weeks.toFixed(1)} weeks
               </p>
-              {r.gemini_note && (
+              {r.gemini_note ? (
                 <p className="mt-2 rounded-md bg-slate-50 p-3 text-sm text-slate-700">
-                  <span className="font-medium">AI note{r.gemini_confidence ? ` (${r.gemini_confidence} confidence)` : ""}:</span> {r.gemini_note}
+                  <span className="font-medium">AI note</span>
+                  <span className="text-slate-500">
+                    {r.gemini_confidence ? ` (${r.gemini_confidence} confidence` : " ("}
+                    {r.gemini_action ? `${r.gemini_confidence ? ", " : ""}suggests: ${r.gemini_action}` : ""})
+                  </span>
+                  : {r.gemini_note}
+                  <span className="mt-1 block text-xs text-slate-500">Advisory only. The order quantity comes from the rules.</span>
                 </p>
-              )}
+              ) : r.gemini_failed ? (
+                <p className="mt-2 text-sm text-slate-500">AI note unavailable for this run. Decide from the numbers above.</p>
+              ) : null}
               {canDecide && <DecisionForms id={r.id} suggested={r.recommended_qty} />}
             </li>
           ))}

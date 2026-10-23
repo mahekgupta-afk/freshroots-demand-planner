@@ -27,3 +27,12 @@ Where the build spec was ambiguous, the most conservative option was taken. Conf
 16. The stock file has a location column. Stock is summed across locations per SKU.
 17. The sample sales history is 16 weeks (W27-W42). The engine uses the latest 12.
 18. `festival_calendar.csv` agrees with `rules.json` (Mar, Oct, Nov). Rules.json stays the source of truth.
+
+## Gemini triage
+19. Gemini runs only for SKUs routed to review. It writes a note (max 60 words), a suggested action and a confidence. It can never change a quantity: quantities are set by the rules and stored separately. This is also covered by a test.
+20. SKUs are sent in batches of 8, up to 6 batches in parallel. `ai_calls` therefore gets **one row per API call** (a batch), not per SKU; the SKU ids are in `request->'skus'`. Failed calls are logged too, with the error.
+21. A call that fails or returns invalid output is retried once, after a 3 second pause (new models often return brief "high demand" errors). SKUs still without a note are saved with `gemini_failed = true` and the review screen says the AI note is unavailable.
+22. The whole AI step has a 35 second budget so a run always finishes inside Vercel's 60 second limit. When the budget runs out the remaining SKUs are flagged as unavailable. Revisit this if review volume grows past roughly 80 SKUs per run.
+23. If `GEMINI_API_KEY` or `GEMINI_MODEL` is missing, triage is skipped and the run still completes. The reason is stored in the run summary (`summary.ai.skipped_reason`).
+24. **Model choice:** `GEMINI_MODEL=gemini-3.5-flash`. `gemini-2.5-flash` is closed to new accounts (404), `gemini-3.8-flash` was unreliable when tested (503s and timeouts), and the `-latest` aliases timed out. Pin a named version rather than an alias so behaviour does not change silently. Re-test with `npm run triage-smoke` before changing it.
+25. Only these fields reach Gemini: SKU id, name, perishable flag, 12 weekly sales, stock, open PO quantity, the rule result and suggested quantity, the review reasons and the planning month. No distributor or personal data.

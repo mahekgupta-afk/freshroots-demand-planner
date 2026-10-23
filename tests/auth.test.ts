@@ -1,8 +1,6 @@
 import { describe, it, expect, beforeAll } from "vitest";
-import { readFileSync } from "node:fs";
-import { PGlite } from "@electric-sql/pglite";
+import { freshDb } from "./helpers/db";
 import { SignJWT } from "jose";
-import { splitSql } from "@/lib/db/migrate";
 import { signToken, verifyToken } from "@/lib/auth/token";
 import { hashPassword, passwordProblem } from "@/lib/auth/password";
 import { authenticate, MAX_FAILED_ATTEMPTS } from "@/lib/auth/login";
@@ -50,11 +48,7 @@ describe("password rules", () => {
 describe("authenticate", () => {
   let query: Query;
   beforeAll(async () => {
-    const pg = new PGlite();
-    query = async (t, p = []) => (await pg.query(t, p)).rows as Record<string, unknown>[];
-    for (const f of ["0001_init.sql", "0002_auth.sql"]) {
-      for (const s of splitSql(readFileSync(new URL(`../db/migrations/${f}`, import.meta.url), "utf8"))) await pg.exec(s);
-    }
+    ({ query } = await freshDb());
     const hash = await hashPassword("correct-horse-battery");
     await query("insert into profiles (email, full_name, role, password_hash) values ('raghav@freshroots.test','Raghav','planner',$1)", [hash]);
     await query("insert into profiles (email, full_name, role, password_hash, active) values ('gone@freshroots.test','Gone','admin',$1,false)", [hash]);
