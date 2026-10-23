@@ -36,3 +36,11 @@ Where the build spec was ambiguous, the most conservative option was taken. Conf
 23. If `GEMINI_API_KEY` or `GEMINI_MODEL` is missing, triage is skipped and the run still completes. The reason is stored in the run summary (`summary.ai.skipped_reason`).
 24. **Model choice:** `GEMINI_MODEL=gemini-3.5-flash`. `gemini-2.5-flash` is closed to new accounts (404), `gemini-3.8-flash` was unreliable when tested (503s and timeouts), and the `-latest` aliases timed out. Pin a named version rather than an alias so behaviour does not change silently. Re-test with `npm run triage-smoke` before changing it.
 25. Only these fields reach Gemini: SKU id, name, perishable flag, 12 weekly sales, stock, open PO quantity, the rule result and suggested quantity, the review reasons and the planning month. No distributor or personal data.
+
+## Email notifications
+26. Run summaries (date, counts by status, SKUs waiting for review, most urgent SKUs, link to the review queue) are emailed after each **scheduled** run only. A manual "Run now" does not email, because the person who clicked is already looking at the screen.
+27. **Failed runs always alert**, scheduled or manual. They go to `ALERT_EMAILS` (admin and IT lead). If that is empty they go to `NOTIFY_EMAILS`, so a failure is never silent.
+28. Email is best-effort and happens after the run is saved. A broken email, a missing key or an unverified sender never fails or delays a run. The outcome is stored in the run summary (`summary.notify`).
+29. Product names come from SAP and are HTML-escaped in emails.
+30. Sending uses Resend over HTTPS. The sender (`NOTIFY_FROM`) must be on a domain verified in Resend. Until one is verified, Resend only delivers to the account owner's own address (`onboarding@resend.dev` as sender is fine for testing).
+31. The dashboard shows a red banner when the latest run failed or has been "running" for over 10 minutes, so a failure is visible even if the email is not set up.

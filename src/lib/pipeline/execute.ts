@@ -1,6 +1,7 @@
 import { neonQuery, type Query } from "@/lib/db/server";
 import { rules } from "@/lib/data/sample";
 import { runPipeline, planningMonthIST, type PipelineInput } from "./run";
+import { appUrlFromEnv, notifierFromEnv, type Notifier, type NotifyOutcome } from "@/lib/email/notify";
 import { triageAll, type TriageConfig, type TriageItem, type TriageOutcome } from "@/lib/gemini/triage";
 
 /** Leaves headroom inside a 60s serverless function for ingest, saving and the response. */
@@ -9,6 +10,10 @@ const AI_BUDGET_MS = 35_000;
 export interface RunOptions {
   /** Override the triage step (tests). Defaults to the real Gemini call when the env vars are set. */
   triage?: (items: TriageItem[], onCall: TriageConfig["onCall"]) => Promise<TriageOutcome[]>;
+  /** Override email sending (tests). `null` turns it off. Defaults to Resend when configured in the environment. */
+  notify?: Notifier | null;
+  /** Public site address for links in emails. Defaults to APP_URL or the Vercel production URL. */
+  appUrl?: string | null;
 }
 
 /**
@@ -20,10 +25,16 @@ export async function executeRun(trigger: "cron" | "manual", query: Query = neon
   const planningMonth = planningMonthIST();
 
   const [run] = await query(
-    "insert into runs (planning_month, rules_version, trigger) values ($1, $2, $3) returning id",
+    "insert into runs (planning_month, rules_version, trigger) values ($1, $2, $3) returning id, started_at::text as started_at",
     [planningMonth, rules.version, trigger],
   );
   const runId = String(run!.id);
+  const startedAt = String(run!.started_at);
+
+  const configured = opts.notify === undefined ? notifierFromEnv() : { notifier: opts.notify, reason: opts.notify ? null : "email disabled" };
+  const appUrl = opts.appUrl === undefined ? appUrlFromEnv() : opts.appUrl;
+  const record = (o: NotifyOutcome) =>
+    query("update runs set summary = coalesce(summary, '{}'::jsonb) || jsonb_build_object('notify', $2::jsonb) where id = $1", [runId, JSON.stringify(o)]);
 
   try {
     const skus = (await query(
@@ -115,10 +126,43 @@ export async function executeRun(trigger: "cron" | "manual", query: Query = neon
       runId,
       JSON.stringify({ ...summary, ai }),
     ]);
-    return { runId, summary: { ...summary, ai } };
+
+    // Email is best-effort and runs after the run is already marked done: nothing here can fail the run.
+    let notify: NotifyOutcome;
+    try {
+      if (trigger !== "cron") notify = { sent: false, recipients: 0, skipped: "manual run" };
+      else if (!configured.notifier) notify = { sent: false, recipients: 0, skipped: configured.reason ?? "email not configured" };
+      else {
+        notify = await configured.notifier.run({
+          startedAt,
+          rulesVersion: rules.version,
+          planningMonth,
+          total: summary.total,
+          counts: summary.counts,
+          pendingReview: planned.filter((p) => p.review_state === "pending").length,
+          rulesShare: summary.rules_share,
+          festival: summary.festival_month,
+          urgent: planned.filter((p) => p.status !== "on_track").slice(0, 5)
+            .map((p) => ({ sku_id: p.sku_id, name: p.name, status: p.status, qty: p.recommended_qty })),
+          aiFailed: ai.failed,
+          appUrl,
+        });
+      }
+      await record(notify);
+    } catch (e) {
+      notify = { sent: false, recipients: 0, error: e instanceof Error ? e.message : String(e) };
+    }
+    return { runId, summary: { ...summary, ai, notify } };
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     await query("update runs set status = 'failed', finished_at = now(), error = $2 where id = $1", [runId, message]);
+    // Failures must be loud: alert whoever is on the alert list. Best-effort, and never masks the real error.
+    try {
+      const outcome: NotifyOutcome = configured.notifier
+        ? await configured.notifier.failure({ startedAt, error: message, trigger, appUrl })
+        : { sent: false, recipients: 0, skipped: configured.reason ?? "email not configured" };
+      await record(outcome);
+    } catch { /* ignore */ }
     throw e;
   }
 }

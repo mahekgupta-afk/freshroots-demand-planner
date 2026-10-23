@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { neonQuery } from "@/lib/db/server";
-import { getLatestRun } from "@/lib/data/latest";
+import { getLatestRun, getRunProblem } from "@/lib/data/latest";
 import { URGENCY } from "@/lib/pipeline/run";
 import { STATUS_LABEL } from "@/components/status";
 import { requireUser } from "@/lib/auth/session";
@@ -13,7 +13,16 @@ export const maxDuration = 60; // the Run now server action runs the full pipeli
 export default async function Dashboard() {
   const user = await requireUser();
   const canRun = user.role === "planner" || user.role === "admin";
-  const latest = await getLatestRun(neonQuery());
+  const query = neonQuery();
+  const [latest, problem] = await Promise.all([getLatestRun(query), getRunProblem(query)]);
+
+  const problemBanner = problem && (
+    <div role="alert" className="rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-900">
+      <strong>{problem.kind === "failed" ? "The latest run failed" : "The latest run did not finish"}</strong> ({formatWhen(problem.started_at)}).
+      {problem.error && <span className="mt-1 block font-mono text-xs">{problem.error}</span>}
+      <span className="mt-1 block">{latest ? "The numbers below are from the previous successful run." : "There are no successful runs yet."}</span>
+    </div>
+  );
 
   const runButton = canRun && (
     <form action={runNow}>
@@ -24,6 +33,7 @@ export default async function Dashboard() {
   if (!latest) {
     return (
       <div className="space-y-4">
+        {problemBanner}
         <h1 className="text-2xl font-semibold">Dashboard</h1>
         <p className="text-slate-600">No run has finished yet. Runs happen Monday and Thursday at 7am IST.</p>
         {runButton}
@@ -35,6 +45,7 @@ export default async function Dashboard() {
 
   return (
     <div className="space-y-6">
+      {problemBanner}
       {summary.festival_month && (
         <div className="rounded-md border border-orange-300 bg-orange-50 px-4 py-2 text-sm text-orange-900">
           Festival month ({monthName(run.planning_month)}): demand is uplifted 25% in the cover calculation.
