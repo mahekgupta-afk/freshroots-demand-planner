@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { executeRun } from "@/lib/pipeline/execute";
-import { supabaseConfigured } from "@/lib/supabase/server";
+import { dbConfigured } from "@/lib/db/server";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -10,8 +10,8 @@ export async function GET(req: Request) {
   if (!secret || req.headers.get("authorization") !== `Bearer ${secret}`) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
-  if (!supabaseConfigured()) {
-    return NextResponse.json({ error: "Supabase is not configured" }, { status: 503 });
+  if (!dbConfigured()) {
+    return NextResponse.json({ error: "DATABASE_URL is not configured" }, { status: 503 });
   }
   try {
     const { runId, summary } = await executeRun("cron");

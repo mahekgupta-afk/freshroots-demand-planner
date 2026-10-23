@@ -1,4 +1,12 @@
--- Freshroots demand planner: schema (spec section 5) + RLS
+-- Freshroots demand planner: schema (spec section 5), plain Postgres (Neon).
+-- Access control is enforced in the app, not in the database: only server code holds DATABASE_URL.
+
+create table profiles (
+  id uuid primary key default gen_random_uuid(),
+  email text not null unique,
+  full_name text,
+  role text not null check (role in ('planner','procurement','admin'))
+);
 
 create table skus (
   sku_id text primary key,
@@ -68,7 +76,7 @@ create table recommendations (
   gemini_confidence text,
   review_state review_state not null default 'auto',
   final_qty integer,
-  decided_by uuid references auth.users(id),
+  decided_by uuid references profiles(id),
   decided_at timestamptz,
   override_reason text,
   zoho_draft_po_id text,
@@ -90,42 +98,3 @@ create table ai_calls (
   error text,
   created_at timestamptz default now()
 );
-
-create table profiles (
-  id uuid primary key references auth.users(id),
-  full_name text,
-  role text not null check (role in ('planner','procurement','admin'))
-);
-
--- Row-level security -------------------------------------------------------
--- The service role bypasses RLS, so server-only tables simply get no write policy.
-alter table skus enable row level security;
-alter table weekly_sales enable row level security;
-alter table stock_snapshots enable row level security;
-alter table open_pos enable row level security;
-alter table runs enable row level security;
-alter table recommendations enable row level security;
-alter table ai_calls enable row level security;
-alter table profiles enable row level security;
-
-create policy "authenticated read" on skus for select to authenticated using (true);
-create policy "authenticated read" on weekly_sales for select to authenticated using (true);
-create policy "authenticated read" on stock_snapshots for select to authenticated using (true);
-create policy "authenticated read" on open_pos for select to authenticated using (true);
-create policy "authenticated read" on runs for select to authenticated using (true);
-create policy "authenticated read" on recommendations for select to authenticated using (true);
-create policy "authenticated read" on ai_calls for select to authenticated using (true);
-create policy "read own profile" on profiles for select to authenticated using (id = auth.uid());
-
-create or replace function public.current_role_name() returns text
-language sql stable security definer set search_path = public as
-$$ select role from profiles where id = auth.uid() $$;
-
-create policy "planner/admin can decide" on recommendations for update to authenticated
-  using (public.current_role_name() in ('planner','admin'))
-  with check (public.current_role_name() in ('planner','admin'));
-
--- Column-level guard: planners may only touch review fields, never the rule output.
-revoke update on recommendations from authenticated;
-grant update (review_state, final_qty, decided_by, decided_at, override_reason)
-  on recommendations to authenticated;
