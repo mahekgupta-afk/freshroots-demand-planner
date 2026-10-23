@@ -1,4 +1,5 @@
 import { loadSampleRun } from "@/lib/data/sample";
+import { getSession } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
@@ -8,6 +9,8 @@ const esc = (v: unknown) => {
 };
 
 export async function GET() {
+  // The proxy already blocks anonymous requests; re-check here so the route is safe on its own.
+  if (!(await getSession())) return Response.json({ error: "unauthorized" }, { status: 401 });
   const { planned, rulesVersion } = loadSampleRun();
   const header = ["sku_id", "name", "status", "on_hand", "open_po_qty", "weekly_demand", "cover_weeks", "recommended_qty", "reason"];
   const lines = planned.map((p) =>
