@@ -9,7 +9,7 @@ export const rules = rulesSchema.parse(rulesJson);
 
 const read = (f: string) => readFileSync(path.join(process.cwd(), "data", "sample", f), "utf8");
 
-/** Runs the pipeline over data/sample. Used until Supabase is connected. */
+/** Runs the pipeline over data/sample. Used until the database is connected. */
 export function loadSampleRun(now = new Date()) {
   const result = runPipeline({
     rules,
