@@ -11,7 +11,7 @@ Where the build spec was ambiguous, the most conservative option was taken. Conf
 | 5 | The sudden-drop test compares week 12 with the mean of weeks 9-11 and is skipped if that mean is 0. | `engine.ts` |
 | 6 | `needs_review` SKUs keep the rule result in `rule_status` and `recommended_qty` as reference only. | `engine.ts` |
 | 7 | **Schema change from the spec:** `open_pos` is keyed on `(zoho_po_id, sku_id)`, not `zoho_po_id` alone, because one PO can hold several SKUs. | migration 0001 |
-| 8 | Planners can update only the review columns of `recommendations` (column-level grant). Rule output stays read-only to users. | migration 0001 |
+| 8 | **Database is Neon Postgres, not Supabase** (client's choice). No row-level security: only server code holds `DATABASE_URL`, and role checks (planner/procurement/admin) are enforced in the app. Login and the SAP file drop (Supabase Auth/Storage in the spec) are replaced separately. | migration 0001 |
 | 9 | Open POs count toward effective stock (spec 6.5). One flag in `rules.json` reverses it. | `rules.json` |
 | 10 | The SAP freshness check uses the file's last-modified time in Storage. | `ingest/sap.ts` |
 
