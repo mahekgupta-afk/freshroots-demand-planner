@@ -4,12 +4,14 @@ import { URGENCY } from "@/lib/pipeline/run";
 import type { RecStatus } from "@/lib/rules/engine";
 import { StatusBadge, STATUS_LABEL } from "@/components/status";
 import { Sparkline } from "@/components/sparkline";
+import { requireUser } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
 const fmt = new Intl.NumberFormat("en-IN");
 
 export default async function Recommendations({ searchParams }: { searchParams: Promise<{ status?: string }> }) {
+  await requireUser();
   const { status } = await searchParams;
   const filter = URGENCY.find((s) => s === status) as RecStatus | undefined;
   const { planned, summary } = loadSampleRun();

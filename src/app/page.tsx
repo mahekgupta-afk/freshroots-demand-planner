@@ -2,12 +2,14 @@ import Link from "next/link";
 import { loadSampleRun } from "@/lib/data/sample";
 import { URGENCY, planningMonthIST } from "@/lib/pipeline/run";
 import { STATUS_LABEL } from "@/components/status";
+import { requireUser } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
 const monthName = (m: number) => new Date(2000, m - 1, 1).toLocaleString("en-IN", { month: "long" });
 
-export default function Dashboard() {
+export default async function Dashboard() {
+  await requireUser();
   const { summary, rulesVersion } = loadSampleRun();
   const month = monthName(planningMonthIST());
   const attention = summary.counts.stockout + summary.counts.needs_review;
