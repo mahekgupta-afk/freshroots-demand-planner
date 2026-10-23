@@ -1,5 +1,7 @@
 import Link from "next/link";
-import { loadSampleRun } from "@/lib/data/sample";
+import { neonQuery } from "@/lib/db/server";
+import { getLatestRun } from "@/lib/data/latest";
+import { qtyLabel } from "@/lib/format";
 import { URGENCY } from "@/lib/pipeline/run";
 import type { RecStatus } from "@/lib/rules/engine";
 import { StatusBadge, STATUS_LABEL } from "@/components/status";
@@ -14,7 +16,9 @@ export default async function Recommendations({ searchParams }: { searchParams: 
   await requireUser();
   const { status } = await searchParams;
   const filter = URGENCY.find((s) => s === status) as RecStatus | undefined;
-  const { planned, summary } = loadSampleRun();
+  const latest = await getLatestRun(neonQuery());
+  if (!latest) return <p className="text-slate-600">No run yet. Start one from the dashboard.</p>;
+  const { recs: planned, summary } = latest;
   const rows = filter ? planned.filter((p) => p.status === filter) : planned;
 
   return (
@@ -55,7 +59,7 @@ export default async function Recommendations({ searchParams }: { searchParams: 
           </thead>
           <tbody className="divide-y divide-slate-100">
             {rows.map((p) => (
-              <tr key={p.sku_id} className="align-top">
+              <tr key={p.id} className="align-top">
                 <td className="px-3 py-2">
                   <div className="font-medium">{p.sku_id}</div>
                   <div className="text-xs text-slate-500">{p.name}{p.perishable ? " · perishable" : ""}</div>
@@ -63,10 +67,11 @@ export default async function Recommendations({ searchParams }: { searchParams: 
                 <td className="px-3 py-2"><StatusBadge status={p.status} /></td>
                 <td className="px-3 py-2 text-right tabular-nums">{fmt.format(p.effective_stock)}</td>
                 <td className="px-3 py-2 text-right tabular-nums">{p.weekly_demand.toFixed(0)}</td>
-                <td className="px-3 py-2 text-right tabular-nums">{Number.isFinite(p.cover_weeks) ? p.cover_weeks.toFixed(1) : "∞"}</td>
+                <td className="px-3 py-2 text-right tabular-nums">{p.cover_weeks === null ? "∞" : p.cover_weeks.toFixed(1)}</td>
                 <td className="px-3 py-2"><Sparkline values={p.weekly_sales} /></td>
                 <td className="px-3 py-2 text-right tabular-nums">
-                  {p.recommended_qty === null ? "–" : p.recommended_qty === 0 ? "Pause" : fmt.format(p.recommended_qty)}
+                  {qtyLabel(p.review_state === "approved" || p.review_state === "overridden" ? p.final_qty : p.recommended_qty)}
+                  {p.review_state === "overridden" && <div className="text-xs text-slate-500">overridden</div>}
                 </td>
                 <td className="px-3 py-2 text-slate-600">
                   {p.status === "needs_review" ? p.review_reasons.join(" ") : p.reasons[0]}
