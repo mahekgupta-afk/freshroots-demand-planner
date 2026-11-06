@@ -1,3 +1,57 @@
 @import "tailwindcss";
 
-body { background: #f8fafc; color: #0f172a; }
+body {
+  background: var(--color-slate-50);
+  color: var(--color-slate-900);
+}
+
+/*
+ * Dark theme. Every page styles itself with Tailwind's colour variables, so redefining the variables here flips the
+ * whole site without touching each component. The slate scale is inverted (50 becomes the page, 900 becomes the text);
+ * "white" becomes the card surface; tinted badge and banner colours become dark tints with light text.
+ * The 500/600 accents (status bars, brand mark) stay as they are: they read on both grounds.
+ * The theme is set on <html data-theme="...">, before first paint, by a small script in layout.tsx.
+ */
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --color-white: #1a212b;
+  --color-slate-50: #0f1419;
+  --color-slate-100: #161c24;
+  --color-slate-200: #263040;
+  --color-slate-300: #3a475a;
+  --color-slate-400: #7b8aa0;
+  --color-slate-500: #94a3b8;
+  --color-slate-600: #b6c1d0;
+  --color-slate-700: #cdd6e2;
+  --color-slate-800: #e2e8f0;
+  --color-slate-900: #f1f5f9;
+
+  --color-red-50: #2a1416;
+  --color-red-100: #3a1a1d;
+  --color-red-300: #7f2a30;
+  --color-red-700: #fca5a5;
+  --color-red-800: #fca5a5;
+  --color-red-900: #fecaca;
+
+  --color-amber-50: #2b2110;
+  --color-amber-100: #3d2e12;
+  --color-amber-300: #7c5b14;
+  --color-amber-400: #a87a12;
+  --color-amber-800: #fcd34d;
+  --color-amber-900: #fde68a;
+
+  --color-orange-50: #2d1a0e;
+  --color-orange-100: #3f2410;
+  --color-orange-300: #8a4a16;
+  --color-orange-800: #fdba74;
+
+  --color-blue-100: #172a4d;
+  --color-blue-800: #93c5fd;
+
+  --color-purple-100: #2e1d4f;
+  --color-purple-800: #d8b4fe;
+
+  --color-emerald-100: #12352a;
+  --color-emerald-800: #6ee7b7;
+}

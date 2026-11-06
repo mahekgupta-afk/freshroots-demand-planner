@@ -12,8 +12,8 @@ export function Sparkline({ values, width = 96, height = 28 }: { values: number[
     })
     .join(" ");
   return (
-    <svg width={width} height={height} role="img" aria-label={`Last ${values.length} weeks, from ${values[0]} to ${values.at(-1)} units`}>
-      <polyline points={pts} fill="none" stroke="#475569" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
+    <svg className="text-slate-600" width={width} height={height} role="img" aria-label={`Last ${values.length} weeks, from ${values[0]} to ${values.at(-1)} units`}>
+      <polyline points={pts} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
     </svg>
   );
 }
