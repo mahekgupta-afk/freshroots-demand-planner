@@ -50,3 +50,8 @@ Where the build spec was ambiguous, the most conservative option was taken. Conf
 33. The procurement list shows only SKUs whose quantity is settled: rule-decided ones, and ones a planner approved or overrode (the planner's final quantity wins). SKUs waiting for review are held back and counted. On-track SKUs are omitted. Without Zoho, procurement acts from this list or its CSV; there are no draft purchase orders.
 34. CSV exports prefix any text starting with `=`, `+`, `-` or `@` with an apostrophe, so a product name from SAP cannot run as a spreadsheet formula.
 35. The Runs page is for planners and admins. SKU detail and the procurement list are visible to every signed-in user.
+
+## Login switch
+36. Login can be turned off with `AUTH_DISABLED=true` (set in Vercel). Every visitor then acts as an anonymous admin called "Guest": they can see all data, approve or override review items, and start runs. Decisions are recorded against a "Guest" profile, so the audit trail shows they were made without a login but cannot say by whom. Unset the variable to bring login back; no code change is needed.
+37. The cron route is not affected by the switch. It keeps its own `CRON_SECRET`.
+38. "Run now" has a 2 minute cooldown (any user, login on or off), so an open site cannot be used to trigger unlimited runs.
