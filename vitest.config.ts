@@ -3,5 +3,6 @@ import { fileURLToPath } from "node:url";
 
 export default defineConfig({
   resolve: { alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) } },
-  test: { include: ["tests/**/*.test.ts"] },
+  // In-memory Postgres (WASM) is slow to boot when several test files start at once.
+  test: { include: ["tests/**/*.test.ts"], testTimeout: 60_000, hookTimeout: 60_000 },
 });

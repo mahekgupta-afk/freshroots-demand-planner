@@ -125,3 +125,22 @@ export async function getLatestRun(query: Query): Promise<{ run: RunInfo; recs: 
   };
   return { run, recs, summary: summarize(recs, run.planning_month) };
 }
+
+export interface RunProblem {
+  kind: "failed" | "stuck";
+  started_at: string;
+  error: string | null;
+}
+
+/** Non-null when the most recent run (of any status) failed, or started over 10 minutes ago and never finished. */
+export async function getRunProblem(query: Query): Promise<RunProblem | null> {
+  const [r] = await query(
+    `select status, error, started_at::text as started_at,
+            (status = 'running' and started_at < now() - interval '10 minutes') as stuck
+       from runs order by started_at desc limit 1`,
+  );
+  if (!r) return null;
+  if (r.status === "failed") return { kind: "failed", started_at: String(r.started_at), error: r.error === null ? null : String(r.error) };
+  if (r.stuck) return { kind: "stuck", started_at: String(r.started_at), error: null };
+  return null;
+}
