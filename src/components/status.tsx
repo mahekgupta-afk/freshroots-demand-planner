@@ -23,3 +23,12 @@ export function StatusBadge({ status }: { status: RecStatus }) {
     </span>
   );
 }
+
+/** Solid colours for charts and dots. Same hues as the badges above so a status always looks the same. */
+export const STATUS_SOLID: Record<RecStatus, string> = {
+  stockout: "bg-red-500",
+  needs_review: "bg-amber-500",
+  high_demand: "bg-blue-500",
+  overstock: "bg-purple-500",
+  on_track: "bg-emerald-500",
+};
