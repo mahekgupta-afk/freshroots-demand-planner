@@ -3,6 +3,7 @@ import Link from "next/link";
 import "./globals.css";
 import { getSession } from "@/lib/auth/session";
 import { logout } from "./login/actions";
+import { authDisabled } from "@/lib/auth/config";
 
 export const metadata: Metadata = {
   title: "Freshroots Demand Planner",
@@ -28,7 +29,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 )}
               </>
             )}
-            {session && (
+            {session && authDisabled() && (
+              <span className="ml-auto text-xs text-slate-400">Login is off</span>
+            )}
+            {session && !authDisabled() && (
               <form action={logout} className="ml-auto flex items-center gap-3 text-slate-600">
                 <span>{session.name} <span className="text-xs text-slate-400">({session.role})</span></span>
                 <button className="underline hover:text-slate-900">Sign out</button>

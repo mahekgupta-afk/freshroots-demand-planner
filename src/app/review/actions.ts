@@ -33,9 +33,16 @@ export async function override(_prev: State, formData: FormData): Promise<State>
   return { done: true };
 }
 
+/** Minimum gap between manual runs. Each run writes to the database and may call Gemini. */
+const RUN_COOLDOWN_MINUTES = 2; // not exported: a "use server" file may only export async functions
+
 export async function runNow() {
   await requireRole("planner", "admin");
-  await executeRun("manual");
+  const [recent] = await neonQuery()(
+    "select 1 as hit from runs where started_at > now() - ($1 || ' minutes')::interval limit 1",
+    [String(RUN_COOLDOWN_MINUTES)],
+  );
+  if (!recent) await executeRun("manual");
   revalidatePath("/");
   revalidatePath("/review");
   revalidatePath("/recommendations");
