@@ -128,3 +128,24 @@ describe("getRunProblem", () => {
     expect(await getRunProblem(query)).toBeNull();
   });
 });
+
+describe("strict stale-data mode", () => {
+  // The sample stock is dated 2026-10-19, which is long out of date.
+  it("fails the run and alerts when stock is too old", async () => {
+    const f = fakeNotifier();
+    await expect(executeRun("cron", query, { ...noAi, notify: f.n, requireFresh: true })).rejects.toThrow(/Stock data is \d+ days old \(as of 2026-10-19\)/);
+    expect(f.failures).toHaveLength(1);
+    expect(f.failures[0]!.error).toMatch(/SAP stock export/);
+    expect((await query("select count(*)::int as n from recommendations"))[0]!.n).toBe(0); // nothing saved
+  });
+  it("passes when stock is recent", async () => {
+    const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+    await query("update stock_snapshots set snapshot_date = $1", [today]);
+    await expect(executeRun("manual", query, { ...noAi, notify: null, requireFresh: true })).resolves.toBeTruthy();
+  });
+  it("is off by default so sample data still runs, and records the stock age", async () => {
+    const { runId } = await executeRun("manual", query, { ...noAi, notify: null });
+    const [r] = await query("select summary from runs where id = $1", [runId]);
+    expect((r!.summary as { stock_age_days: number }).stock_age_days).toBeGreaterThan(2);
+  });
+});

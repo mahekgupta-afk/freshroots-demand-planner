@@ -6,6 +6,7 @@ import { STATUS_LABEL } from "@/components/status";
 import { requireUser } from "@/lib/auth/session";
 import { formatWhen, monthName } from "@/lib/format";
 import { runNow } from "./review/actions";
+import { StaleBanner } from "@/components/stale-banner";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60; // the Run now server action runs the full pipeline
@@ -46,6 +47,7 @@ export default async function Dashboard() {
   return (
     <div className="space-y-6">
       {problemBanner}
+      <StaleBanner stockAsOf={run.stock_as_of} />
       {summary.festival_month && (
         <div className="rounded-md border border-orange-300 bg-orange-50 px-4 py-2 text-sm text-orange-900">
           Festival month ({monthName(run.planning_month)}): demand is uplifted 25% in the cover calculation.

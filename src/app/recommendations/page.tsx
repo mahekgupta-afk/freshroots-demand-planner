@@ -2,6 +2,7 @@ import Link from "next/link";
 import { neonQuery } from "@/lib/db/server";
 import { getLatestRun } from "@/lib/data/latest";
 import { qtyLabel } from "@/lib/format";
+import { StaleBanner } from "@/components/stale-banner";
 import { URGENCY } from "@/lib/pipeline/run";
 import type { RecStatus } from "@/lib/rules/engine";
 import { StatusBadge, STATUS_LABEL } from "@/components/status";
@@ -23,6 +24,7 @@ export default async function Recommendations({ searchParams }: { searchParams: 
 
   return (
     <div className="space-y-4">
+      <StaleBanner stockAsOf={latest.run.stock_as_of} />
       <div className="flex items-end justify-between">
         <h1 className="text-2xl font-semibold">Recommendations</h1>
         <a href="/api/export" className="text-sm text-slate-600 underline hover:text-slate-900">Export CSV</a>
@@ -61,7 +63,7 @@ export default async function Recommendations({ searchParams }: { searchParams: 
             {rows.map((p) => (
               <tr key={p.id} className="align-top">
                 <td className="px-3 py-2">
-                  <div className="font-medium">{p.sku_id}</div>
+                  <Link href={`/sku/${encodeURIComponent(p.sku_id)}`} className="font-medium hover:underline">{p.sku_id}</Link>
                   <div className="text-xs text-slate-500">{p.name}{p.perishable ? " · perishable" : ""}</div>
                 </td>
                 <td className="px-3 py-2"><StatusBadge status={p.status} /></td>

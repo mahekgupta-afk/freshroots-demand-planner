@@ -44,3 +44,9 @@ Where the build spec was ambiguous, the most conservative option was taken. Conf
 29. Product names come from SAP and are HTML-escaped in emails.
 30. Sending uses Resend over HTTPS. The sender (`NOTIFY_FROM`) must be on a domain verified in Resend. Until one is verified, Resend only delivers to the account owner's own address (`onboarding@resend.dev` as sender is fine for testing).
 31. The dashboard shows a red banner when the latest run failed or has been "running" for over 10 minutes, so a failure is visible even if the email is not set up.
+
+## Data freshness, procurement list, history
+32. Stock older than 2 days (India calendar days) shows an amber banner on the dashboard, recommendations and procurement pages. With `REQUIRE_FRESH_DATA=true` the run itself fails (and alerts) instead. It defaults to off only because the pilot runs on sample data with no live SAP feed. **Turn it on when the SAP export goes live.** The age is stored in each run summary as `stock_age_days`.
+33. The procurement list shows only SKUs whose quantity is settled: rule-decided ones, and ones a planner approved or overrode (the planner's final quantity wins). SKUs waiting for review are held back and counted. On-track SKUs are omitted. Without Zoho, procurement acts from this list or its CSV; there are no draft purchase orders.
+34. CSV exports prefix any text starting with `=`, `+`, `-` or `@` with an apostrophe, so a product name from SAP cannot run as a spreadsheet formula.
+35. The Runs page is for planners and admins. SKU detail and the procurement list are visible to every signed-in user.

@@ -22,6 +22,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 <Link href="/" className="text-slate-600 hover:text-slate-900">Dashboard</Link>
                 <Link href="/recommendations" className="text-slate-600 hover:text-slate-900">Recommendations</Link>
                 <Link href="/review" className="text-slate-600 hover:text-slate-900">Review</Link>
+                <Link href="/procurement" className="text-slate-600 hover:text-slate-900">Procurement</Link>
+                {(session.role === "planner" || session.role === "admin") && (
+                  <Link href="/runs" className="text-slate-600 hover:text-slate-900">Runs</Link>
+                )}
               </>
             )}
             {session && (

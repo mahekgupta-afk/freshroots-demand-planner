@@ -1,5 +1,6 @@
 import { neonQuery, type Query } from "@/lib/db/server";
 import { rules } from "@/lib/data/sample";
+import { MAX_STOCK_AGE_DAYS, isStale, requireFreshData, stockAgeDays } from "@/lib/data/freshness";
 import { runPipeline, planningMonthIST, type PipelineInput } from "./run";
 import { appUrlFromEnv, notifierFromEnv, type Notifier, type NotifyOutcome } from "@/lib/email/notify";
 import { triageAll, type TriageConfig, type TriageItem, type TriageOutcome } from "@/lib/gemini/triage";
@@ -12,6 +13,8 @@ export interface RunOptions {
   triage?: (items: TriageItem[], onCall: TriageConfig["onCall"]) => Promise<TriageOutcome[]>;
   /** Override email sending (tests). `null` turns it off. Defaults to Resend when configured in the environment. */
   notify?: Notifier | null;
+  /** Fail the run when stock data is older than the limit. Defaults to the REQUIRE_FRESH_DATA environment variable. */
+  requireFresh?: boolean;
   /** Public site address for links in emails. Defaults to APP_URL or the Vercel production URL. */
   appUrl?: string | null;
 }
@@ -53,6 +56,16 @@ export async function executeRun(trigger: "cron" | "manual", query: Query = neon
     )) as unknown as PipelineInput["openPos"];
 
     const { planned, summary } = runPipeline({ rules, planningMonth, skus, sales, stock, openPos });
+
+    // Never present old stock as current. Off by default only while there is no live SAP feed (sample data).
+    const stockAge = stockAgeDays(summary.stock_as_of);
+    if ((opts.requireFresh ?? requireFreshData()) && isStale(stockAge)) {
+      throw new Error(
+        stockAge === null
+          ? "No stock snapshot found. Check the SAP stock export."
+          : `Stock data is ${stockAge} days old (as of ${summary.stock_as_of}); the limit is ${MAX_STOCK_AGE_DAYS} days. Check the SAP stock export.`,
+      );
+    }
 
     // AI notes for the SKUs the rules cannot decide. Strictly advisory: quantities come from the rules only,
     // and nothing in this block can fail the run.
@@ -124,7 +137,7 @@ export async function executeRun(trigger: "cron" | "manual", query: Query = neon
 
     await query("update runs set status = 'done', finished_at = now(), summary = $2::jsonb where id = $1", [
       runId,
-      JSON.stringify({ ...summary, ai }),
+      JSON.stringify({ ...summary, ai, stock_age_days: stockAge }),
     ]);
 
     // Email is best-effort and runs after the run is already marked done: nothing here can fail the run.
