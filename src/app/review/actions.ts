@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { neonQuery } from "@/lib/db/server";
 import { requireRole } from "@/lib/auth/session";
 import { decide } from "@/lib/review/decide";
-import { executeRun } from "@/lib/pipeline/execute";
+import { runManually, type RunNowState } from "@/lib/pipeline/run-now";
 
 type State = { error?: string; done?: boolean } | undefined;
 
@@ -33,17 +33,11 @@ export async function override(_prev: State, formData: FormData): Promise<State>
   return { done: true };
 }
 
-/** Minimum gap between manual runs. Each run writes to the database and may call Gemini. */
-const RUN_COOLDOWN_MINUTES = 2; // not exported: a "use server" file may only export async functions
-
-export async function runNow() {
+export async function runNow(_prev: RunNowState | undefined): Promise<RunNowState> {
   await requireRole("planner", "admin");
-  const [recent] = await neonQuery()(
-    "select 1 as hit from runs where started_at > now() - ($1 || ' minutes')::interval limit 1",
-    [String(RUN_COOLDOWN_MINUTES)],
-  );
-  if (!recent) await executeRun("manual");
+  const state = await runManually(neonQuery());
   revalidatePath("/");
   revalidatePath("/review");
   revalidatePath("/recommendations");
+  return state;
 }
