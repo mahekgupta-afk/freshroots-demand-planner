@@ -165,7 +165,7 @@ export async function executeRun(trigger: "cron" | "manual", query: Query = neon
     } catch (e) {
       notify = { sent: false, recipients: 0, error: e instanceof Error ? e.message : String(e) };
     }
-    return { runId, summary: { ...summary, ai, notify } };
+    return { runId, summary: { ...summary, ai, notify, stock_age_days: stockAge } };
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     await query("update runs set status = 'failed', finished_at = now(), error = $2 where id = $1", [runId, message]);

@@ -5,7 +5,7 @@ import { URGENCY } from "@/lib/pipeline/run";
 import { STATUS_LABEL, STATUS_SOLID } from "@/components/status";
 import { requireUser } from "@/lib/auth/session";
 import { formatWhen, monthName } from "@/lib/format";
-import { runNow } from "./review/actions";
+import { RunNowButton } from "@/components/run-now-button";
 import { StaleBanner } from "@/components/stale-banner";
 
 export const dynamic = "force-dynamic";
@@ -28,13 +28,10 @@ export default async function Dashboard() {
     </div>
   );
 
-  const runButton = canRun && (
-    <form action={runNow}>
-      <button className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50">
-        Run now
-      </button>
-    </form>
+  const exportLink = (
+    <a href="/api/export" className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50">Export CSV</a>
   );
+  const actions = canRun ? <RunNowButton>{exportLink}</RunNowButton> : exportLink;
 
   if (!latest) {
     return (
@@ -42,7 +39,7 @@ export default async function Dashboard() {
         {problemBanner}
         <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
         <p className="text-slate-600">No run has finished yet. Runs happen Monday and Thursday at 7am IST.</p>
-        {runButton}
+        {actions}
       </div>
     );
   }
@@ -81,10 +78,7 @@ export default async function Dashboard() {
             ))}
           </dl>
         </div>
-        <div className="flex gap-2">
-          {runButton}
-          <a href="/api/export" className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50">Export CSV</a>
-        </div>
+        {actions}
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
